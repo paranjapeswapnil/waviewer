@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>WhatsApp Chat Viewer</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#075e54">
+
+<!-- iOS PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WA Viewer">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+
+<!-- iOS splash screens (iPhone 14 Pro / common sizes) -->
+<meta name="msapplication-TileImage" content="icons/icon-144.png">
+<meta name="msapplication-TileColor" content="#075e54">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --wa-bg: #e5ddd5;
+    --wa-chat-bg: #f0f2f5;
+    --wa-header-bg: #075e54;
+    --wa-header-text: #ffffff;
+    --wa-sent-bg: #dcf8c6;
+    --wa-sent-text: #111b21;
+    --wa-received-bg: #ffffff;
+    --wa-received-text: #111b21;
+    --wa-meta-text: #667781;
+    --wa-time-text: #667781;
+    --wa-search-bg: #ffffff;
+    --wa-input-bg: #f0f2f5;
+    --wa-border: #e9edef;
+    --wa-system-text: #667781;
+    --wa-system-bg: rgba(255,255,255,0.75);
+    --wa-drop-bg: #ffffff;
+    --wa-drop-border: #ddd;
+    --wa-accent: #25d366;
+    --wa-accent-dark: #075e54;
+    --wa-sender-colors: #e9427a, #2196f3, #9c27b0, #ff5722, #009688, #795548, #607d8b;
+  }
+
+  [data-theme="dark"] {
+    --wa-bg: #0d1418;
+    --wa-chat-bg: #111b21;
+    --wa-header-bg: #1f2c33;
+    --wa-header-text: #e9edef;
+    --wa-sent-bg: #005c4b;
+    --wa-sent-text: #e9edef;
+    --wa-received-bg: #1f2c33;
+    --wa-received-text: #e9edef;
+    --wa-meta-text: #8696a0;
+    --wa-time-text: #8696a0;
+    --wa-search-bg: #2a3942;
+    --wa-input-bg: #2a3942;
+    --wa-border: #2a3942;
+    --wa-system-text: #8696a0;
+    --wa-system-bg: rgba(31,44,51,0.9);
+    --wa-drop-bg: #1f2c33;
+    --wa-drop-border: #2a3942;
+  }
+
+  body {
+    font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--wa-bg);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: -webkit-fill-available;
+    overflow: hidden;
+    transition: background 0.2s;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+    box-shadow: 0 0 40px rgba(0,0,0,0.2);
+  }
+
+  /* HEADER */
+  .header {
+    background: var(--wa-header-bg);
+    color: var(--wa-header-text);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .header-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: #25d366;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; color: #fff;
+    flex-shrink: 0;
+  }
+
+  .header-info { flex: 1; min-width: 0; }
+  .header-name { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-sub { font-size: 12px; opacity: 0.8; margin-top: 1px; }
+
+  .header-actions { display: flex; gap: 4px; }
+  .icon-btn {
+    background: none; border: none; color: var(--wa-header-text);
+    cursor: pointer; padding: 8px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.85; transition: opacity 0.15s, background 0.15s;
+  }
+  .icon-btn:hover { opacity: 1; background: rgba(255,255,255,0.12); }
+
+  /* SEARCH BAR */
+  .search-bar {
+    background: var(--wa-header-bg);
+    padding: 4px 16px 10px;
+    display: none;
+  }
+  .search-bar.visible { display: block; }
+  .search-input-wrap { position: relative; }
+  .search-input-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0.5; pointer-events: none; }
+  .search-input {
+    width: 100%; padding: 8px 12px 8px 36px;
+    border: none; border-radius: 8px;
+    background: var(--wa-search-bg); color: var(--wa-sent-text);
+    font-size: 14px; outline: none;
+  }
+  .search-count { font-size: 12px; color: var(--wa-header-text); opacity: 0.7; margin-top: 4px; text-align: right; }
+
+  /* CHAT AREA */
+  .chat-area {
+    flex: 1; overflow-y: auto;
+    background: var(--wa-chat-bg);
+    padding: 12px 8px;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .chat-area::-webkit-scrollbar { width: 6px; }
+  .chat-area::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 3px; }
+
+  /* DROP ZONE */
+  #drop-zone {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: var(--wa-chat-bg);
+    padding: 40px 20px; text-align: center;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .drop-card {
+    background: var(--wa-drop-bg);
+    border: 2px dashed var(--wa-drop-border);
+    border-radius: 16px;
+    padding: 48px 40px;
+    max-width: 420px;
+    width: 100%;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .drop-card.dragover { border-color: #25d366; background: rgba(37,211,102,0.05); }
+  .drop-icon { font-size: 56px; margin-bottom: 16px; }
+  .drop-title { font-size: 20px; font-weight: 700; color: var(--wa-sent-text); margin-bottom: 8px; }
+  .drop-sub { font-size: 14px; color: var(--wa-meta-text); line-height: 1.5; margin-bottom: 24px; }
+  .drop-btn {
+    background: #25d366; color: #fff; border: none; border-radius: 24px;
+    padding: 12px 28px; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .drop-btn:hover { background: #1db954; }
+  #file-input { display: none; }
+  .drop-hint { font-size: 12px; color: var(--wa-meta-text); margin-top: 12px; }
+
+  /* DATE DIVIDER */
+  .date-divider {
+    text-align: center; margin: 12px 0 8px;
+    position: relative;
+  }
+  .date-divider span {
+    background: var(--wa-system-bg);
+    color: var(--wa-system-text);
+    font-size: 12px; font-weight: 500;
+    padding: 4px 12px; border-radius: 8px;
+    display: inline-block;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  /* SYSTEM MESSAGE */
+  .system-msg {
+    text-align: center; margin: 6px 0;
+  }
+  .system-msg span {
+    background: var(--wa-system-bg);
+    color: var(--wa-system-text);
+    font-size: 12px; padding: 4px 12px;
+    border-radius: 8px; display: inline-block;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+
+  /* BUBBLES */
+  .msg-row {
+    display: flex; margin-bottom: 3px;
+    padding: 0 4px;
+  }
+  .msg-row.sent { justify-content: flex-end; }
+  .msg-row.received { justify-content: flex-start; }
+  .msg-row.group-start { margin-top: 8px; }
+
+  .bubble {
+    max-width: 72%;
+    min-width: 80px;
+    padding: 7px 10px 6px;
+    border-radius: 7.5px;
+    position: relative;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+    word-break: break-word;
+    line-height: 1.4;
+    font-size: 14.5px;
+  }
+
+  .sent .bubble {
+    background: var(--wa-sent-bg);
+    color: var(--wa-sent-text);
+    border-top-right-radius: 2px;
+  }
+  .received .bubble {
+    background: var(--wa-received-bg);
+    color: var(--wa-received-text);
+    border-top-left-radius: 2px;
+  }
+
+  .bubble-tail-sent::before {
+    content: '';
+    position: absolute; top: 0; right: -8px;
+    width: 0; height: 0;
+    border-left: 8px solid var(--wa-sent-bg);
+    border-top: 8px solid transparent;
+  }
+  .bubble-tail-received::before {
+    content: '';
+    position: absolute; top: 0; left: -8px;
+    width: 0; height: 0;
+    border-right: 8px solid var(--wa-received-bg);
+    border-top: 8px solid transparent;
+  }
+
+  .sender-name {
+    font-size: 12.5px; font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .msg-footer {
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: 3px; margin-top: 3px; float: right;
+    margin-left: 8px;
+  }
+  .msg-time {
+    font-size: 11px; color: var(--wa-time-text);
+    white-space: nowrap;
+  }
+  .sent .msg-time { color: rgba(0,0,0,0.4); }
+  [data-theme="dark"] .sent .msg-time { color: rgba(255,255,255,0.45); }
+
+  .msg-text::after { content: '\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0\00a0'; }
+
+  /* Media placeholder */
+  .media-placeholder {
+    background: rgba(0,0,0,0.06);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--wa-meta-text);
+    margin-bottom: 4px;
+  }
+  .media-placeholder svg { flex-shrink: 0; opacity: 0.5; }
+
+  /* HIGHLIGHT */
+  .highlight { background: #ffe08a; border-radius: 2px; }
+  [data-theme="dark"] .highlight { background: #7d6608; color: #fff; }
+
+  /* STATS BAR */
+  .stats-bar {
+    background: var(--wa-header-bg);
+    color: var(--wa-header-text);
+    padding: 6px 16px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom));
+    font-size: 12px; opacity: 0.85;
+    display: flex; gap: 16px; flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  /* SCROLL TO BOTTOM */
+  .scroll-btn {
+    position: fixed; bottom: 20px; right: calc(50% - 450px + 20px);
+    background: var(--wa-received-bg);
+    color: var(--wa-meta-text);
+    border: none; border-radius: 50%;
+    width: 44px; height: 44px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    cursor: pointer; display: none;
+    align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+
+  @media (max-width: 920px) {
+    .scroll-btn { right: 20px; }
+  }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center; padding: 40px 20px;
+    color: var(--wa-meta-text);
+    font-size: 14px;
+  }
+
+  /* JUMP TO DATE */
+  .jump-btn {
+    position: fixed; bottom: 72px; right: calc(50% - 450px + 20px);
+    background: var(--wa-accent);
+    color: #fff;
+    border: none; border-radius: 50%;
+    width: 44px; height: 44px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    cursor: pointer; display: none;
+    align-items: center; justify-content: center;
+    font-size: 18px; z-index: 100;
+    transition: background 0.15s;
+  }
+  .jump-btn:hover { background: #1db954; }
+  @media (max-width: 920px) { .jump-btn { right: 20px; } }
+
+  .jump-panel {
+    position: fixed; bottom: 124px; right: calc(50% - 450px + 20px);
+    background: var(--wa-received-bg);
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    width: 240px; max-height: 360px;
+    overflow-y: auto; z-index: 200;
+    display: none; flex-direction: column;
+  }
+  .jump-panel.open { display: flex; }
+  .jump-panel::-webkit-scrollbar { width: 4px; }
+  .jump-panel::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
+  @media (max-width: 920px) { .jump-panel { right: 20px; } }
+
+  .jump-month {
+    padding: 8px 14px 4px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+    color: var(--wa-meta-text); text-transform: uppercase;
+    background: var(--wa-input-bg);
+    position: sticky; top: 0;
+  }
+  .jump-day {
+    padding: 9px 14px; cursor: pointer;
+    font-size: 13.5px; color: var(--wa-received-text);
+    border-bottom: 0.5px solid var(--wa-border);
+    display: flex; justify-content: space-between; align-items: center;
+    transition: background 0.1s;
+  }
+  .jump-day:hover { background: var(--wa-input-bg); }
+  .jump-day-count { font-size: 11px; color: var(--wa-meta-text); }
+  .jump-header {
+    padding: 12px 14px 8px;
+    font-size: 13px; font-weight: 600;
+    color: var(--wa-received-text);
+    border-bottom: 0.5px solid var(--wa-border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .jump-close {
+    background: none; border: none; cursor: pointer;
+    color: var(--wa-meta-text); font-size: 18px; line-height: 1;
+    padding: 0;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <div class="header-avatar" id="header-avatar">W</div>
+    <div class="header-info">
+      <div class="header-name" id="header-name">WhatsApp Chat Viewer</div>
+      <div class="header-sub" id="header-sub">Drop a chat export to begin</div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="search-toggle" title="Search" style="display:none">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button class="icon-btn" id="theme-toggle" title="Toggle theme">
+        <svg id="theme-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="new-chat-btn" title="Load new chat" style="display:none">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="search-bar" id="search-bar">
+    <div class="search-input-wrap">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="search-input" id="search-input" type="text" placeholder="Search messages…" autocomplete="off">
+    </div>
+    <div class="search-count" id="search-count"></div>
+  </div>
+
+  <div id="drop-zone">
+    <div class="drop-card" id="drop-card">
+      <div class="drop-icon">💬</div>
+      <div class="drop-title">Open a WhatsApp Chat</div>
+      <div class="drop-sub">Export a chat from WhatsApp (without media) and drop the .txt file here — works for both 1-on-1 and group chats.</div>
+      <button class="drop-btn" id="pick-file-btn">Choose .txt file</button>
+      <input type="file" id="file-input" accept=".txt,text/plain">
+      <div class="drop-hint">or share a .txt file directly from WhatsApp → tap share → this app</div>
+    </div>
+  </div>
+
+  <div class="chat-area" id="chat-area" style="display:none"></div>
+  <div class="stats-bar" id="stats-bar" style="display:none"></div>
+</div>
+
+<button class="scroll-btn" id="scroll-btn" title="Scroll to bottom">↓</button>
+<button class="jump-btn" id="jump-btn" title="Jump to date">📅</button>
+<div class="jump-panel" id="jump-panel">
+  <div class="jump-header">
+    <span>Jump to date</span>
+    <button class="jump-close" id="jump-close">×</button>
+  </div>
+  <div id="jump-list"></div>
+</div>
+
+<script>
+const senderColorMap = {};
+const palette = ['#e91e8c','#2196f3','#9c27b0','#ff5722','#009688','#795548','#607d8b','#f44336','#3f51b5','#00bcd4'];
+let colorIdx = 0;
+
+function getSenderColor(name) {
+  if (!senderColorMap[name]) {
+    senderColorMap[name] = palette[colorIdx % palette.length];
+    colorIdx++;
+  }
+  return senderColorMap[name];
+}
+
+function initials(name) {
+  return name.split(' ').slice(0,2).map(w => w[0]?.toUpperCase() || '').join('') || '?';
+}
+
+let parsedMessages = [];
+let myName = '';
+
+function parseWhatsAppChat(text) {
+  const lines = text.split('\n');
+  const messages = [];
+
+  // Try both Android and iOS formats
+  // Android: [DD/MM/YYYY, HH:MM:SS] Name: Message
+  // iOS: DD/MM/YYYY, HH:MM - Name: Message
+  // Also: M/D/YY, H:MM AM/PM - Name: Message
+
+  const patterns = [
+    /^\[(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AaPp][Mm])?)\]\s*(.+?):\s*([\s\S]*)$/,
+    /^(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AaPp][Mm])?)\s[-–]\s(.+?):\s*([\s\S]*)$/,
+    /^(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AaPp][Mm])?)\s[-–]\s([\s\S]*)$/,
+    /^\[(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AaPp][Mm])?)\]\s*([\s\S]*)$/,
+  ];
+
+  let current = null;
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      if (current) current.text += '\n';
+      continue;
+    }
+
+    let matched = false;
+    for (const pattern of patterns) {
+      const m = line.match(pattern);
+      if (m) {
+        if (current) messages.push(current);
+        if (m.length === 5) {
+          current = { date: m[1], time: m[2], sender: m[3].trim(), text: m[4] };
+        } else {
+          // System message (no sender colon)
+          current = { date: m[1], time: m[2], sender: null, text: m[3] };
+        }
+        matched = true;
+        break;
+      }
+    }
+    if (!matched && current) {
+      current.text += '\n' + line;
+    }
+  }
+  if (current) messages.push(current);
+  return messages;
+}
+
+function detectSelf(messages) {
+  const senders = {};
+  for (const m of messages) {
+    if (m.sender) senders[m.sender] = (senders[m.sender] || 0) + 1;
+  }
+  const sorted = Object.entries(senders).sort((a,b) => b[1]-a[1]);
+  return sorted[0]?.[0] || '';
+}
+
+function parseDate(dateStr) {
+  const parts = dateStr.split(/[\/\-\.]/);
+  if (parts.length !== 3) return new Date();
+  let [a, b, c] = parts.map(Number);
+  if (c < 100) c += 2000;
+  // DD/MM/YYYY
+  return new Date(c, b - 1, a);
+}
+
+function formatDateLabel(dateStr) {
+  const d = parseDate(dateStr);
+  const now = new Date();
+  const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+  const ds = d.toDateString();
+  if (ds === now.toDateString()) return 'Today';
+  if (ds === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function isMediaMessage(text) {
+  const t = text.trim();
+  return t === '<Media omitted>' || t === 'image omitted' || t === 'video omitted' ||
+    t === 'audio omitted' || t === 'document omitted' || t === 'sticker omitted' ||
+    t.includes('omitted') || t.includes('.jpg') || t.includes('.mp4') ||
+    t.includes('.pdf') || t.includes('.opus');
+}
+
+function getMediaIcon(text) {
+  const t = text.toLowerCase();
+  if (t.includes('video') || t.includes('.mp4')) return ['🎥', 'Video'];
+  if (t.includes('audio') || t.includes('.opus') || t.includes('.m4a')) return ['🎵', 'Audio'];
+  if (t.includes('sticker')) return ['😄', 'Sticker'];
+  if (t.includes('.pdf') || t.includes('document')) return ['📄', 'Document'];
+  return ['📷', 'Photo'];
+}
+
+function escapeHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlight(text, query) {
+  if (!query) return escapeHtml(text);
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(${escaped})`, 'gi');
+  return escapeHtml(text).replace(re, '<mark class="highlight">$1</mark>');
+}
+
+let searchQuery = '';
+let allBubbles = [];
+
+function renderChat(messages, query) {
+  const container = document.getElementById('chat-area');
+  container.innerHTML = '';
+  allBubbles = [];
+
+  const self = myName;
+  let lastDate = '';
+  let lastSender = '';
+  let msgCount = 0;
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const text = msg.text.trim();
+
+    // Filter
+    if (query && !text.toLowerCase().includes(query.toLowerCase()) &&
+        !(msg.sender || '').toLowerCase().includes(query.toLowerCase())) continue;
+
+    // Date divider
+    if (msg.date !== lastDate) {
+      const div = document.createElement('div');
+      div.className = 'date-divider';
+      div.dataset.date = msg.date;
+      div.innerHTML = `<span>${formatDateLabel(msg.date)}</span>`;
+      container.appendChild(div);
+      lastDate = msg.date;
+      lastSender = '';
+    }
+
+    // System message (no sender)
+    if (!msg.sender) {
+      const sysEl = document.createElement('div');
+      sysEl.className = 'system-msg';
+      sysEl.innerHTML = `<span>${escapeHtml(text)}</span>`;
+      container.appendChild(sysEl);
+      lastSender = '';
+      continue;
+    }
+
+    const isSent = msg.sender === self;
+    const isGroupStart = msg.sender !== lastSender;
+
+    const row = document.createElement('div');
+    row.className = `msg-row ${isSent ? 'sent' : 'received'}${isGroupStart ? ' group-start' : ''}`;
+
+    const bubble = document.createElement('div');
+    const tailClass = isGroupStart ? (isSent ? ' bubble-tail-sent' : ' bubble-tail-received') : '';
+    bubble.className = `bubble${tailClass}`;
+
+    let inner = '';
+
+    if (!isSent && isGroupStart) {
+      const color = getSenderColor(msg.sender);
+      inner += `<div class="sender-name" style="color:${color}">${escapeHtml(msg.sender)}</div>`;
+    }
+
+    if (isMediaMessage(text)) {
+      const [icon, label] = getMediaIcon(text);
+      inner += `<div class="media-placeholder">
+        <span style="font-size:20px">${icon}</span>
+        <span>${label}</span>
+      </div>`;
+    } else {
+      const lines = text.split('\n').map(l => highlight(l, query)).join('<br>');
+      inner += `<span class="msg-text">${lines}</span>`;
+    }
+
+    inner += `<div class="msg-footer"><span class="msg-time">${escapeHtml(msg.time)}</span></div>`;
+    bubble.innerHTML = inner;
+    row.appendChild(bubble);
+    container.appendChild(row);
+
+    if (query) allBubbles.push(row);
+    lastSender = msg.sender;
+    msgCount++;
+  }
+
+  if (msgCount === 0 && query) {
+    container.innerHTML = `<div class="empty-state">No messages found for "<strong>${escapeHtml(query)}</strong>"</div>`;
+  }
+
+  return msgCount;
+}
+
+function updateStats(messages) {
+  const senders = {};
+  let total = 0;
+  for (const m of messages) {
+    if (m.sender) {
+      senders[m.sender] = (senders[m.sender] || 0) + 1;
+      total++;
+    }
+  }
+  const bar = document.getElementById('stats-bar');
+  const names = Object.entries(senders).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  let html = `<span>💬 ${total.toLocaleString()} messages</span>`;
+  for (const [name, count] of names) {
+    const short = name.split(' ')[0];
+    html += `<span style="color:${getSenderColor(name)}">${escapeHtml(short)}: ${count.toLocaleString()}</span>`;
+  }
+  bar.innerHTML = html;
+  bar.style.display = 'flex';
+}
+
+function loadChat(text, fileName) {
+  const messages = parseWhatsAppChat(text);
+  if (!messages.length) {
+    alert('Could not parse this file. Make sure it\'s a WhatsApp chat export (.txt).');
+    return;
+  }
+  parsedMessages = messages;
+  myName = detectSelf(messages);
+
+  // Update header
+  const chatName = fileName.replace(/whatsapp chat with /i, '').replace(/_/g,' ').replace(/\.txt$/i, '').replace(/\s*\(\d+\)$/, '').trim();
+  document.getElementById('header-name').textContent = chatName || 'Chat';
+  document.getElementById('header-sub').textContent = `${messages.filter(m=>m.sender).length.toLocaleString()} messages`;
+  document.getElementById('header-avatar').textContent = initials(chatName || 'C');
+  document.getElementById('header-avatar').style.background = '#25d366';
+
+  document.getElementById('drop-zone').style.display = 'none';
+  document.getElementById('chat-area').style.display = 'block';
+  document.getElementById('search-toggle').style.display = 'flex';
+  document.getElementById('new-chat-btn').style.display = 'flex';
+  document.getElementById('jump-btn').style.display = 'flex';
+
+  renderChat(messages, '');
+  updateStats(messages);
+  populateJumpPanel(messages);
+
+  const area = document.getElementById('chat-area');
+  setTimeout(() => area.scrollTop = area.scrollHeight, 50);
+}
+
+// File input
+document.getElementById('pick-file-btn').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => loadChat(ev.target.result, file.name);
+  reader.readAsText(file, 'UTF-8');
+});
+
+// Drag & drop
+const dropCard = document.getElementById('drop-card');
+document.body.addEventListener('dragover', e => { e.preventDefault(); dropCard.classList.add('dragover'); });
+document.body.addEventListener('dragleave', e => { if (!e.relatedTarget) dropCard.classList.remove('dragover'); });
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  dropCard.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.name.endsWith('.txt')) { alert('Please drop a .txt file.'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => loadChat(ev.target.result, file.name);
+  reader.readAsText(file, 'UTF-8');
+});
+
+// New chat
+document.getElementById('new-chat-btn').addEventListener('click', () => {
+  document.getElementById('drop-zone').style.display = 'flex';
+  document.getElementById('chat-area').style.display = 'none';
+  document.getElementById('stats-bar').style.display = 'none';
+  document.getElementById('search-toggle').style.display = 'none';
+  document.getElementById('new-chat-btn').style.display = 'none';
+  document.getElementById('jump-btn').style.display = 'none';
+  document.getElementById('jump-panel').classList.remove('open');
+  document.getElementById('search-bar').classList.remove('visible');
+  document.getElementById('header-name').textContent = 'WhatsApp Chat Viewer';
+  document.getElementById('header-sub').textContent = 'Drop a chat export to begin';
+  document.getElementById('header-avatar').textContent = 'W';
+  document.getElementById('file-input').value = '';
+  parsedMessages = [];
+  Object.keys(senderColorMap).forEach(k => delete senderColorMap[k]);
+  colorIdx = 0;
+});
+
+// Search
+let searchTimeout;
+document.getElementById('search-toggle').addEventListener('click', () => {
+  const bar = document.getElementById('search-bar');
+  bar.classList.toggle('visible');
+  if (bar.classList.contains('visible')) {
+    document.getElementById('search-input').focus();
+  } else {
+    document.getElementById('search-input').value = '';
+    searchQuery = '';
+    renderChat(parsedMessages, '');
+    document.getElementById('search-count').textContent = '';
+    setTimeout(() => document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight, 50);
+  }
+});
+
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    searchQuery = e.target.value.trim();
+    const count = renderChat(parsedMessages, searchQuery);
+    if (searchQuery) {
+      document.getElementById('search-count').textContent = count ? `${count} result${count !== 1 ? 's' : ''}` : 'No results';
+    } else {
+      document.getElementById('search-count').textContent = '';
+      setTimeout(() => document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight, 50);
+    }
+  }, 200);
+});
+
+// Theme toggle
+let dark = false;
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  dark = !dark;
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : '');
+  const icon = document.getElementById('theme-icon');
+  icon.innerHTML = dark
+    ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+    : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+});
+
+// Scroll to bottom btn
+const chatArea = document.getElementById('chat-area');
+const scrollBtn = document.getElementById('scroll-btn');
+chatArea.addEventListener('scroll', () => {
+  const atBottom = chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 80;
+  scrollBtn.style.display = (!atBottom && parsedMessages.length) ? 'flex' : 'none';
+});
+scrollBtn.addEventListener('click', () => {
+  chatArea.scrollTop = chatArea.scrollHeight;
+});
+
+// Jump to date
+function buildDateIndex(messages) {
+  const index = {}; // date string -> { label, count }
+  for (const m of messages) {
+    if (!m.date) continue;
+    if (!index[m.date]) index[m.date] = { label: formatDateLabel(m.date), count: 0, raw: m.date };
+    if (m.sender) index[m.date].count++;
+  }
+  return index;
+}
+
+function populateJumpPanel(messages) {
+  const index = buildDateIndex(messages);
+  const list = document.getElementById('jump-list');
+  list.innerHTML = '';
+
+  const dates = Object.keys(index);
+  if (!dates.length) return;
+
+  // Group by month
+  const byMonth = {};
+  for (const d of dates) {
+    const parsed = parseDate(d);
+    const monthKey = parsed.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    if (!byMonth[monthKey]) byMonth[monthKey] = [];
+    byMonth[monthKey].push({ raw: d, ...index[d] });
+  }
+
+  for (const [month, days] of Object.entries(byMonth)) {
+    const mHeader = document.createElement('div');
+    mHeader.className = 'jump-month';
+    mHeader.textContent = month;
+    list.appendChild(mHeader);
+
+    for (const day of days) {
+      const el = document.createElement('div');
+      el.className = 'jump-day';
+      const parsed = parseDate(day.raw);
+      const dayLabel = parsed.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      el.innerHTML = `<span>${dayLabel}</span><span class="jump-day-count">${day.count}</span>`;
+      el.addEventListener('click', () => {
+        document.getElementById('jump-panel').classList.remove('open');
+        const target = document.querySelector(`.date-divider[data-date="${CSS.escape(day.raw)}"]`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      list.appendChild(el);
+    }
+  }
+}
+
+const jumpBtn = document.getElementById('jump-btn');
+const jumpPanel = document.getElementById('jump-panel');
+
+jumpBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  jumpPanel.classList.toggle('open');
+});
+
+document.getElementById('jump-close').addEventListener('click', () => {
+  jumpPanel.classList.remove('open');
+});
+
+document.addEventListener('click', (e) => {
+  if (!jumpPanel.contains(e.target) && e.target !== jumpBtn) {
+    jumpPanel.classList.remove('open');
+  }
+});
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
+// iOS: handle files shared via "Open in" from Files app
+window.addEventListener('focus', () => {
+  // Re-check file input in case app was opened via share sheet
+});
+</script>
+</body>
+</html>
